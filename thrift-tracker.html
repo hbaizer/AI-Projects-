@@ -589,7 +589,73 @@
 
 
 
-  /* ===== VISIT LOG in card ===== */
+  /* ===== STARS ===== */
+  .star-row {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .star-btn {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.25;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+
+  .star-btn.lit { opacity: 1; }
+  .star-btn:active { transform: scale(1.3); }
+
+  /* ===== WISHLIST ===== */
+  .wishlist-btn {
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.3;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+
+  .wishlist-btn.active { opacity: 1; }
+  .wishlist-btn:active { transform: scale(1.3); }
+
+  /* ===== HISTORY DELETE ===== */
+  .history-delete {
+    background: none;
+    border: none;
+    font-size: 14px;
+    color: var(--kraft-dark);
+    cursor: pointer;
+    opacity: 0.4;
+    padding: 2px 4px;
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+  }
+
+  .history-delete:active { opacity: 1; }
+
+  /* ===== REFRESH LOCATION BUTTON ===== */
+  .refresh-loc-btn {
+    padding: 8px 10px;
+    font-family: 'Special Elite', monospace;
+    font-size: 11px;
+    border: 1px solid var(--kraft);
+    background: white;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--kraft-dark);
+    transition: all 0.15s;
+    display: none;
+  }
+
+  .refresh-loc-btn.show { display: block; }
+  .refresh-loc-btn:active { background: var(--kraft-light); }
   .visit-count {
     font-family: 'Special Elite', monospace;
     font-size: 9px;
@@ -696,7 +762,9 @@
       <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
       <button class="filter-btn" onclick="setFilter('visited', this)">Visited</button>
       <button class="filter-btn" onclick="setFilter('unvisited', this)">Unvisited</button>
+      <button class="filter-btn" onclick="setFilter('wishlist', this)">🔖 Wishlist</button>
       <button class="filter-btn" id="nearme-btn" onclick="sortByDistance(this)">📍 Near Me</button>
+      <button class="refresh-loc-btn" id="refresh-loc-btn" onclick="refreshLocation()">🔄 Refresh</button>
     </div>
     <div id="geocode-status" style="display:none; font-family:'Special Elite',monospace; font-size:10px; letter-spacing:1px; color:var(--kraft-dark); text-align:center; padding:8px 0 4px;"></div>
     <div class="stores-list" id="stores-list"></div>
@@ -1015,6 +1083,7 @@ function setFilter(f, btn) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('geocode-status').style.display = 'none';
+  document.getElementById('refresh-loc-btn').classList.remove('show');
   renderStores();
 }
 
@@ -1096,6 +1165,7 @@ async function sortByDistance(btn) {
     sortByDist = false;
     btn.classList.remove('active');
     document.getElementById('geocode-status').style.display = 'none';
+    document.getElementById('refresh-loc-btn').classList.remove('show');
     document.querySelectorAll('.filter-btn')[0].click();
     return;
   }
@@ -1108,10 +1178,14 @@ async function sortByDistance(btn) {
   status.style.display = 'block';
   status.textContent = 'Getting your location…';
 
-  // Get user position
+  // Get fresh user position - maximumAge:0 forces iPhone to get real GPS, not cached
   try {
     const pos = await new Promise((resolve, reject) =>
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        timeout: 10000,
+        maximumAge: 0,
+        enableHighAccuracy: true
+      })
     );
     userLat = pos.coords.latitude;
     userLng = pos.coords.longitude;
@@ -1138,6 +1212,7 @@ async function sortByDistance(btn) {
   sortByDist = true;
   status.textContent = '';
   status.style.display = 'none';
+  document.getElementById('refresh-loc-btn').classList.add('show');
   renderStores();
 }
 
@@ -1148,11 +1223,13 @@ function renderStores() {
   let filtered = stores.filter(s => {
     const matchSearch = !query ||
       s.name.toLowerCase().includes(query) ||
-      (s.address || '').toLowerCase().includes(query);
+      (s.address || '').toLowerCase().includes(query) ||
+      (s.notes || '').toLowerCase().includes(query);
     const matchFilter =
       activeFilter === 'all' ||
       (activeFilter === 'visited' && s.lastVisit) ||
-      (activeFilter === 'unvisited' && !s.lastVisit);
+      (activeFilter === 'unvisited' && !s.lastVisit) ||
+      (activeFilter === 'wishlist' && s.wishlist);
     return matchSearch && matchFilter;
   });
 
@@ -1201,6 +1278,12 @@ function renderStores() {
             <div class="store-name">${s.name}</div>
             ${s.address ? `<div class="store-address">📍 ${s.address}</div>` : ''}
             ${visitCount > 0 ? `<div class="visit-count">Visited ${visitCount} time${visitCount !== 1 ? 's' : ''}</div>` : ''}
+            <div class="star-row">
+              <button class="star-btn ${(s.rating||0) >= 1 ? 'lit' : ''}" onclick="setRating('${s.id}',${(s.rating||0) === 1 ? 0 : 1})">★</button>
+              <button class="star-btn ${(s.rating||0) >= 2 ? 'lit' : ''}" onclick="setRating('${s.id}',${(s.rating||0) === 2 ? 0 : 2})">★</button>
+              <button class="star-btn ${(s.rating||0) >= 3 ? 'lit' : ''}" onclick="setRating('${s.id}',${(s.rating||0) === 3 ? 0 : 3})">★</button>
+              <button class="wishlist-btn ${s.wishlist ? 'active' : ''}" onclick="toggleWishlist('${s.id}')" title="${s.wishlist ? 'On wishlist' : 'Add to wishlist'}">🔖</button>
+            </div>
           </div>
           ${compassBadge ? compassBadge : `<div class="visit-badge ${visited ? 'visited' : 'unvisited'}">${visited ? '✓ Visited' : 'Not yet'}</div>`}
         </div>
@@ -1371,19 +1454,82 @@ function renderHistory() {
   }
 
   const sorted = [...history].sort((a, b) => b.date.localeCompare(a.date));
-  list.innerHTML = sorted.map(h => `
+  list.innerHTML = sorted.map((h, i) => `
     <div class="history-entry">
       <div class="history-dot"></div>
-      <div>
+      <div style="flex:1;">
         <div class="history-store">${h.storeName}</div>
         ${h.storeAddress ? `<div class="history-address">📍 ${h.storeAddress}</div>` : ''}
         <div class="history-date">${formatDate(h.date)} · ${daysAgo(h.date)}</div>
       </div>
+      <button class="history-delete" onclick="deleteHistoryEntry(${sorted.indexOf(h)})" title="Remove">🗑️</button>
     </div>
   `).join('');
 }
 
-// ===== EXPORT / IMPORT =====
+// ===== RATINGS =====
+function setRating(id, rating) {
+  const store = stores.find(s => s.id === id);
+  if (!store) return;
+  store.rating = rating;
+  save();
+  renderStores();
+}
+
+// ===== WISHLIST =====
+function toggleWishlist(id) {
+  const store = stores.find(s => s.id === id);
+  if (!store) return;
+  store.wishlist = !store.wishlist;
+  save();
+  renderStores();
+}
+
+// ===== DELETE HISTORY ENTRY =====
+function deleteHistoryEntry(sortedIndex) {
+  if (!confirm('Remove this visit from history?')) return;
+  const sorted = [...history].sort((a, b) => b.date.localeCompare(a.date));
+  const entry = sorted[sortedIndex];
+  if (!entry) return;
+  const idx = history.indexOf(entry);
+  if (idx > -1) history.splice(idx, 1);
+  save();
+  renderHistory();
+  updateStats();
+  showToast('Visit removed');
+}
+
+// ===== REFRESH LOCATION =====
+async function refreshLocation() {
+  const status = document.getElementById('geocode-status');
+  status.style.display = 'block';
+  status.textContent = 'Refreshing location…';
+  try {
+    const pos = await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        timeout: 10000,
+        maximumAge: 0,  // force fresh reading, ignore cache
+        enableHighAccuracy: true
+      })
+    );
+    userLat = pos.coords.latitude;
+    userLng = pos.coords.longitude;
+    stores.forEach(s => {
+      if (s._lat != null && s._lng != null) {
+        s._dist = haversine(userLat, userLng, s._lat, s._lng);
+        s._bearing = calcBearing(userLat, userLng, s._lat, s._lng);
+      }
+    });
+    status.textContent = '';
+    status.style.display = 'none';
+    renderStores();
+    showToast('Location updated ✓');
+  } catch {
+    status.textContent = '';
+    status.style.display = 'none';
+    showToast('Could not get location — check Settings');
+  }
+}
 function exportData() {
   const data = {
     version: 1,
